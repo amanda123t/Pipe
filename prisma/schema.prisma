@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organizations OrganizationMember[]
+  cards         CardAssignee[]
+  comments      Comment[]
+  activities    Activity[]
+  createdCards  Card[]               @relation("CardCreator")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logo      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members OrganizationMember[]
+  pipes   Pipe[]
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  role           String       @default("MEMBER") // OWNER, ADMIN, MEMBER, VIEWER
+  createdAt      DateTime     @default(now())
+  userId         String
+  organizationId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Pipe {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  icon           String?
+  color          String   @default("#6B4EFF")
+  isPublic       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  phases      Phase[]
+  fields      Field[]
+  cards       Card[]
+  automations Automation[]
+  webhooks    Webhook[]
+}
+
+model Phase {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#64748B")
+  order       Int
+  isDone      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pipeId      String
+  pipe        Pipe     @relation(fields: [pipeId], references: [id], onDelete: Cascade)
+
+  cards Card[]
+}
+
+model Field {
+  id          String   @id @default(cuid())
+  label       String
+  type        String   // SHORT_TEXT, LONG_TEXT, NUMBER, DATE, DATETIME, SELECT, MULTISELECT, CHECKBOX, EMAIL, PHONE, URL, ATTACHMENT, ASSIGNEE, LABEL
+  required    Boolean  @default(false)
+  description String?
+  options     String?  // JSON string for select options
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pipeId      String
+  pipe        Pipe     @relation(fields: [pipeId], references: [id], onDelete: Cascade)
+
+  fieldValues FieldValue[]
+}
+
+model Card {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status      String   @default("ACTIVE") // ACTIVE, DONE, OVERDUE, ARCHIVED
+  order       Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  pipeId      String
+  phaseId     String
+  createdById String
+  pipe        Pipe     @relation(fields: [pipeId], references: [id], onDelete: Cascade)
+  phase       Phase    @relation(fields: [phaseId], references: [id])
+  createdBy   User     @relation("CardCreator", fields: [createdById], references: [id])
+
+  assignees   CardAssignee[]
+  fieldValues FieldValue[]
+  comments    Comment[]
+  activities  Activity[]
+  attachments Attachment[]
+  labels      CardLabel[]
+}
+
+model CardAssignee {
+  id        String   @id @default(cuid())
+  cardId    String
+  userId    String
+  createdAt DateTime @default(now())
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, userId])
+}
+
+model FieldValue {
+  id        String   @id @default(cuid())
+  value     String?
+  cardId    String
+  fieldId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  field     Field    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([cardId, fieldId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cardId    String
+  authorId  String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id])
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  type      String   // CARD_CREATED, CARD_MOVED, CARD_UPDATED, FIELD_UPDATED, COMMENT_ADDED, ...
+  data      String?  // JSON string with activity details
+  createdAt DateTime @default(now())
+  cardId    String
+  userId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  size      Int
+  mimeType  String
+  createdAt DateTime @default(now())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+model Label {
+  id    String      @id @default(cuid())
+  name  String
+  color String
+  cards CardLabel[]
+}
+
+model CardLabel {
+  cardId  String
+  labelId String
+  card    Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, labelId])
+}
+
+model Automation {
+  id         String   @id @default(cuid())
+  name       String
+  enabled    Boolean  @default(true)
+  trigger    String   // CARD_CREATED, CARD_MOVED, FIELD_UPDATED, DUE_DATE_REACHED, CARD_ASSIGNED
+  conditions String?  // JSON string
+  actions    String   // JSON string
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  pipeId     String
+  pipe       Pipe     @relation(fields: [pipeId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  events    String   // JSON array of events
+  enabled   Boolean  @default(true)
+  secret    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pipeId    String
+  pipe      Pipe     @relation(fields: [pipeId], references: [id], onDelete: Cascade)
+}
